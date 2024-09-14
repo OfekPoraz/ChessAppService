@@ -12,7 +12,8 @@ func (p Pawn) GetPossibleMoves(board *Board, position PossibleMovesPosition) []P
 	if p.Color == "black" {
 		direction = 1
 	}
-	if board.IsValidPosition(PossibleMovesPosition{Row: position.Row + direction, Col: position.Col}) {
+	if (board.IsValidPosition(PossibleMovesPosition{Row: position.Row + direction, Col: position.Col}) &&
+		board.GetPiece(PossibleMovesPosition{Row: position.Row + direction, Col: position.Col}) == nil) {
 		moves = append(moves, PossibleMovesPosition{Row: position.Row + direction, Col: position.Col, IsCapture: false})
 	}
 

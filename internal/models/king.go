@@ -14,9 +14,9 @@ func (k King) GetPossibleMoves(board *Board, position PossibleMovesPosition) []P
 	for _, move := range kingMoves {
 		newPos := PossibleMovesPosition{Row: position.Row + move.Row, Col: position.Col + move.Col}
 		if board.IsValidPosition(newPos) {
-			if board.GetPiece(newPos) == nil || board.GetPiece(newPos).Color == k.Color {
+			if board.GetPiece(newPos) == nil {
 				moves = append(moves, PossibleMovesPosition{Row: newPos.Row, Col: newPos.Col, IsCapture: false})
-			} else {
+			} else if board.GetPiece(newPos).Color != k.Color {
 				moves = append(moves, PossibleMovesPosition{Row: newPos.Row, Col: newPos.Col, IsCapture: true})
 			}
 		}

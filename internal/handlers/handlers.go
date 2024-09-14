@@ -47,6 +47,7 @@ func CreateGame(w http.ResponseWriter, r *http.Request) {
 		"board":        game.Board.Pieces,
 	}
 
+	fmt.Println(response)
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(response)
 }
@@ -119,7 +120,15 @@ func MakeMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	game.Board.MovePiece(move.From, move.To)
+	isWin, winner := game.Board.MovePiece(game.CurrentTurn, move.From, move.To)
+	if isWin {
+		response := map[string]interface{}{
+			"winner": winner,
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
 	game.CurrentTurn = switchTurn(game.CurrentTurn)
 	games[game.ID] = game
 
@@ -170,6 +179,12 @@ func GetPossibleMoves(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fmt.Println(game.ID)
+	fmt.Println(game.CurrentTurn)
+	fmt.Println(game.Player2ID)
+	fmt.Println(game.Player1ID)
+	fmt.Println(game.Board)
+
 	position := models.PositionFromString(piecePosition)
 	fmt.Println("PossibleMovesPosition: ")
 	fmt.Println(position)
@@ -184,4 +199,116 @@ func switchTurn(currentTurn string) string {
 		return "black"
 	}
 	return "white"
+}
+
+func MakeRandomMove(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+	game, ok := games[params["id"]]
+	if !ok {
+		http.Error(w, "Game not found", http.StatusNotFound)
+		return
+	}
+
+	isWin, winner, err := game.Board.MakeRandomMove(game.CurrentTurn)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if isWin {
+		response := map[string]interface{}{
+			"winner": winner,
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	game.CurrentTurn = switchTurn(game.CurrentTurn)
+	games[game.ID] = game
+
+	response := map[string]interface{}{
+		"id":           game.ID,
+		"player1_id":   game.Player1ID,
+		"player2_id":   game.Player2ID,
+		"state":        game.State,
+		"current_turn": game.CurrentTurn,
+		"board":        game.Board.Pieces,
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+func ApplyPowerBoost0(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+	gameID := params["id"]
+
+	game, ok := games[gameID]
+	if !ok {
+		http.Error(w, "Game not found", http.StatusNotFound)
+		return
+	}
+
+	err := game.Board.PowerBoost0(game.CurrentTurn)
+	if err != nil {
+		http.Error(w, "Failed to apply power boost", http.StatusInternalServerError)
+		return
+	}
+
+	game.CurrentTurn = switchTurn(game.CurrentTurn)
+	games[game.ID] = game
+
+	response := map[string]interface{}{
+		"success": true,
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func ApplyPowerBoost1(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+	gameID := params["id"]
+
+	game, ok := games[gameID]
+	if !ok {
+		http.Error(w, "Game not found", http.StatusNotFound)
+		return
+	}
+
+	err := game.Board.PowerBoost1(game.CurrentTurn)
+	if err != nil {
+		http.Error(w, "Failed to apply power boost", http.StatusInternalServerError)
+		return
+	}
+
+	game.CurrentTurn = switchTurn(game.CurrentTurn)
+	games[game.ID] = game
+
+	response := map[string]interface{}{
+		"success": true,
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func ApplyPowerBoost2(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+	gameID := params["id"]
+
+	game, ok := games[gameID]
+	if !ok {
+		http.Error(w, "Game not found", http.StatusNotFound)
+		return
+	}
+
+	err := game.Board.PowerBoost2(game.CurrentTurn)
+	if err != nil {
+		http.Error(w, "Failed to apply power boost", http.StatusInternalServerError)
+		return
+	}
+
+	game.CurrentTurn = switchTurn(game.CurrentTurn)
+	games[game.ID] = game
+
+	response := map[string]interface{}{
+		"success": true,
+	}
+	json.NewEncoder(w).Encode(response)
 }
