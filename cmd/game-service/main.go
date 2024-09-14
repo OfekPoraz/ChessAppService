@@ -21,6 +21,7 @@ func main() {
 	r.HandleFunc("/games/{id}/powerboost/0", handlers.ApplyPowerBoost0).Methods("POST")
 	r.HandleFunc("/games/{id}/powerboost/1", handlers.ApplyPowerBoost1).Methods("POST")
 	r.HandleFunc("/games/{id}/powerboost/2", handlers.ApplyPowerBoost2).Methods("POST")
+	r.HandleFunc("/games/{id}/powerboost/3", handlers.ApplyPowerBoost3).Methods("POST")
 
 	log.Fatal(http.ListenAndServe(":8000", r))
 }

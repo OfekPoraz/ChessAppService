@@ -45,6 +45,7 @@ func CreateGame(w http.ResponseWriter, r *http.Request) {
 		"state":        game.State,
 		"current_turn": game.CurrentTurn,
 		"board":        game.Board.Pieces,
+		"mines":        game.Board.Mines,
 	}
 
 	fmt.Println(response)
@@ -67,6 +68,7 @@ func GetGame(w http.ResponseWriter, r *http.Request) {
 		"state":        game.State,
 		"current_turn": game.CurrentTurn,
 		"board":        game.Board.Pieces,
+		"mines":        game.Board.Mines,
 	}
 
 	json.NewEncoder(w).Encode(response)
@@ -299,6 +301,31 @@ func ApplyPowerBoost2(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err := game.Board.PowerBoost2(game.CurrentTurn)
+	if err != nil {
+		http.Error(w, "Failed to apply power boost", http.StatusInternalServerError)
+		return
+	}
+
+	game.CurrentTurn = switchTurn(game.CurrentTurn)
+	games[game.ID] = game
+
+	response := map[string]interface{}{
+		"success": true,
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func ApplyPowerBoost3(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+	gameID := params["id"]
+
+	game, ok := games[gameID]
+	if !ok {
+		http.Error(w, "Game not found", http.StatusNotFound)
+		return
+	}
+
+	err := game.Board.PowerBoost3(game.CurrentTurn)
 	if err != nil {
 		http.Error(w, "Failed to apply power boost", http.StatusInternalServerError)
 		return

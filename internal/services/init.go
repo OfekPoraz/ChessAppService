@@ -25,5 +25,6 @@ func InitializeBoard(rows, columns int) *models.Board {
 	board.PlacePiece(models.Queen{Color: "black"}, models.PossibleMovesPosition{Row: 6, Col: 3})
 	board.PlacePiece(models.Bishop{Color: "black"}, models.PossibleMovesPosition{Row: 6, Col: 4})
 
+	board.PlaceMine("white")
 	return board
 }

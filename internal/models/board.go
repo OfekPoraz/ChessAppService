@@ -2,6 +2,7 @@ package models
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 )
 
@@ -11,10 +12,17 @@ type PiecePosition struct {
 	Type     PieceType `json:"type"`
 }
 
+type Mine struct {
+	Position PossibleMovesPosition `json:"position"`
+	Owner    string                `json:"owner"`    // The player who placed the mine
+	IsActive bool                  `json:"isActive"` // Mine is active until triggered
+}
+
 type Board struct {
 	Rows    int             `json:"rows"`
 	Columns int             `json:"columns"`
 	Pieces  []PiecePosition `json:"pieces"`
+	Mines   []Mine          `json:"mines"` // Add this to track mines on the board
 }
 
 var validMoves []struct {
@@ -27,6 +35,7 @@ func NewBoard(rows, columns int) *Board {
 		Rows:    rows,
 		Columns: columns,
 		Pieces:  []PiecePosition{},
+		Mines:   []Mine{},
 	}
 }
 
@@ -89,6 +98,9 @@ func (b *Board) MovePiece(currentTurn string, from, to PossibleMovesPosition) (b
 		return true, winnerColor
 	}
 
+	// Check for mines
+	b.TriggerMineIfPresent(to, currentTurn)
+
 	enemyPieces := []PiecePosition{}
 	for _, piece := range b.Pieces {
 		if piece.Color != currentTurn {
@@ -98,8 +110,20 @@ func (b *Board) MovePiece(currentTurn string, from, to PossibleMovesPosition) (b
 
 	// Check if the only remaining enemy piece is the king
 	if len(enemyPieces) == 1 && enemyPieces[0].Type == KingType {
+		return true, currentTurn
+	}
+
+	currentTurnPieces := []PiecePosition{}
+	for _, piece := range b.Pieces {
+		if piece.Color == currentTurn {
+			currentTurnPieces = append(currentTurnPieces, piece)
+		}
+	}
+
+	// Check if the only remaining enemy piece is the king
+	if len(currentTurnPieces) == 1 && currentTurnPieces[0].Type == KingType {
 		var winnerColor string
-		if enemyPieces[0].Color == "white" {
+		if currentTurn == "white" {
 			winnerColor = "black"
 		} else {
 			winnerColor = "white"
@@ -212,7 +236,7 @@ func (b *Board) GetPossibleMoves(position PossibleMovesPosition) []PossibleMoves
 	return piece.GetPossibleMoves(b, position)
 }
 
-// PowerBoost converts an opponent's piece to the player's piece based on the given probabilities.
+// PowerBoost0 converts an opponent's piece to the player's piece based on the given probabilities.
 func (b *Board) PowerBoost0(currentPlayer string) error {
 	fmt.Println(currentPlayer)
 	// Get a list of opponent pieces on the board
@@ -645,6 +669,71 @@ func (b *Board) getValidTeleportPositions(selectedPiece PiecePosition, currentPl
 		}
 	}
 	return validPositions
+}
+
+func (b *Board) PlaceMine(currentPlayer string) {
+	var validMinePositions []PossibleMovesPosition
+
+	// Find the opponent's king
+	var opponentKing *PiecePosition
+	for _, piece := range b.Pieces {
+		if piece.Color != currentPlayer && piece.Type == KingType {
+			opponentKing = &piece
+			break
+		}
+	}
+
+	// Find valid positions for the mine, avoiding the opponent's king surrounding squares
+	for i := 0; i < b.Rows; i++ {
+		for j := 0; j < b.Columns; j++ {
+			newPos := PossibleMovesPosition{Row: i, Col: j}
+			if b.GetPiece(newPos) == nil { // Ensure the square is empty
+				if opponentKing == nil || !isSurroundingKing(opponentKing.Location, newPos) {
+					validMinePositions = append(validMinePositions, newPos)
+				}
+			}
+		}
+	}
+
+	// Select a random valid position for the mine
+	if len(validMinePositions) > 0 {
+		selectedPosition := validMinePositions[rand.Intn(len(validMinePositions))]
+		b.Mines = append(b.Mines, Mine{Position: selectedPosition, Owner: currentPlayer, IsActive: true})
+	}
+}
+
+// Helper function to check if a position is surrounding the opponent's king
+func isSurroundingKing(kingPos string, pos PossibleMovesPosition) bool {
+	kingPosition := PositionFromString(kingPos)
+	rowDiff := math.Abs(float64(kingPosition.Row - pos.Row))
+	colDiff := math.Abs(float64(kingPosition.Col - pos.Col))
+	return rowDiff <= 1 && colDiff <= 1
+}
+
+func (b *Board) TriggerMineIfPresent(to PossibleMovesPosition, currentPlayer string) {
+	for i, mine := range b.Mines {
+		// Check if the piece landed on an active mine
+		if mine.Position == to && mine.IsActive && mine.Owner != currentPlayer {
+			fmt.Println("Mine triggered! Destroying opponent's piece.")
+
+			// Remove the opponent's piece
+			for j, piece := range b.Pieces {
+				if piece.Location == fmt.Sprintf("%c%d", 'A'+to.Col, to.Row+1) {
+					b.Pieces = append(b.Pieces[:j], b.Pieces[j+1:]...)
+					break
+				}
+			}
+
+			// Deactivate the mine after triggering
+			b.Mines[i].IsActive = false
+			break
+		}
+	}
+}
+
+func (b *Board) PowerBoost3(currentPlayer string) error {
+	b.PlaceMine(currentPlayer)
+	return nil
 }
 
 func upgradePieceType(currentType PieceType) PieceType {
