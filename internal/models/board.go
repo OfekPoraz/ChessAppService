@@ -42,6 +42,7 @@ func NewBoard(rows, columns int) *Board {
 func (b *Board) PlacePiece(piece Piece, position PossibleMovesPosition) {
 	if position.Row >= 0 && position.Row < b.Rows && position.Col >= 0 && position.Col < b.Columns {
 		location := fmt.Sprintf("%c%d", 'A'+position.Col, b.Rows-position.Row)
+		fmt.Println("positioned piece", piece, "in position", location)
 		piecePosition := PiecePosition{
 			Location: location,
 			Color:    piece.GetColor(),
@@ -54,13 +55,14 @@ func (b *Board) PlacePiece(piece Piece, position PossibleMovesPosition) {
 	}
 }
 
-func (b *Board) MovePiece(currentTurn string, from, to PossibleMovesPosition) (bool, string) {
+func (b *Board) MovePiece(currentTurn string, from, to PossibleMovesPosition) (bool, string, string) {
 	fromLocation := fmt.Sprintf("%c%d", 'A'+from.Col, from.Row+1)
 	fmt.Println("Moving from", fromLocation)
 	toLocation := fmt.Sprintf("%c%d", 'A'+to.Col, to.Row+1)
 	fmt.Println("Moving to", toLocation)
 
 	var capturedPiece *PiecePosition
+	var killReason = "" // Field to track the reason for piece elimination
 
 	// Remove any piece that is currently at the destination location
 	for i, piece := range b.Pieces {
@@ -95,11 +97,16 @@ func (b *Board) MovePiece(currentTurn string, from, to PossibleMovesPosition) (b
 		} else {
 			winnerColor = "white"
 		}
-		return true, winnerColor
+		return true, winnerColor, killReason
 	}
 
 	// Check for mines
-	b.TriggerMineIfPresent(to, currentTurn)
+	mineTriggered, mineMessage := b.TriggerMineIfPresent(to, currentTurn)
+	if mineTriggered {
+		fmt.Println(mineMessage)
+		killReason = "mine"
+		// Return the killReason and no win yet
+	}
 
 	enemyPieces := []PiecePosition{}
 	for _, piece := range b.Pieces {
@@ -110,7 +117,7 @@ func (b *Board) MovePiece(currentTurn string, from, to PossibleMovesPosition) (b
 
 	// Check if the only remaining enemy piece is the king
 	if len(enemyPieces) == 1 && enemyPieces[0].Type == KingType {
-		return true, currentTurn
+		return true, currentTurn, killReason
 	}
 
 	currentTurnPieces := []PiecePosition{}
@@ -120,7 +127,7 @@ func (b *Board) MovePiece(currentTurn string, from, to PossibleMovesPosition) (b
 		}
 	}
 
-	// Check if the only remaining enemy piece is the king
+	// Check if the only remaining current turn piece is the king
 	if len(currentTurnPieces) == 1 && currentTurnPieces[0].Type == KingType {
 		var winnerColor string
 		if currentTurn == "white" {
@@ -128,10 +135,10 @@ func (b *Board) MovePiece(currentTurn string, from, to PossibleMovesPosition) (b
 		} else {
 			winnerColor = "white"
 		}
-		return true, winnerColor
+		return true, winnerColor, killReason
 	}
 
-	return false, ""
+	return false, "", killReason
 }
 
 func (b *Board) MovePieceForChecking(from, to PossibleMovesPosition) (bool, string) {
@@ -176,18 +183,26 @@ func PositionFromString(posStr string) PossibleMovesPosition {
 	return PossibleMovesPosition{Row: row, Col: col}
 }
 
-func (b *Board) MakeRandomMove(currentColor string) (bool, string, error) {
+func (b *Board) MakeRandomMove(currentColor string) (bool, string, string, PossibleMovesPosition, error) {
+	validMoves = []struct {
+		from PossibleMovesPosition
+		to   PossibleMovesPosition
+	}{}
 	var kingPosition PossibleMovesPosition
 	kingPositionPtr := extractKingPosition(currentColor, b)
+	fmt.Println(`king position is `, kingPositionPtr)
 	if kingPositionPtr != nil {
 		kingPosition = *kingPositionPtr // Assign to the previously declared variable
 	} else {
-		return false, "", fmt.Errorf("no valid moves available")
+		return false, "", "", PossibleMovesPosition{}, fmt.Errorf("no valid moves available")
 	}
+	fmt.Println(`king position is `, kingPosition)
+
 	// Collect all valid moves
 	for _, piecePos := range b.Pieces {
 		if piecePos.Color == currentColor {
 			from := PositionFromString(piecePos.Location)
+			fmt.Println(`from`, from)
 			possibleMoves := b.GetPossibleMoves(from)
 			for _, move := range possibleMoves {
 				// Filter out moves that put the king in check
@@ -204,19 +219,32 @@ func (b *Board) MakeRandomMove(currentColor string) (bool, string, error) {
 	}
 
 	if len(validMoves) == 0 {
-		return false, "", fmt.Errorf("no valid moves available")
+		return false, "", "", PossibleMovesPosition{}, fmt.Errorf("no valid moves available")
 	}
 
 	// Randomly select a move
+	fmt.Println(`validMoves`, validMoves)
 	selectedMove := validMoves[rand.Intn(len(validMoves))]
-	isWin, winner := b.MovePiece(currentColor, selectedMove.from, selectedMove.to)
+	fmt.Println(`selected move`, selectedMove)
 
-	return isWin, winner, nil
+	isWin, winner, killReason := b.MovePiece(currentColor, selectedMove.from, selectedMove.to)
+
+	return isWin, winner, killReason, selectedMove.to, nil
 }
 
 func extractKingPosition(currentColor string, b *Board) *PossibleMovesPosition {
 	for _, piecePos := range b.Pieces {
 		if piecePos.Type == KingType && piecePos.Color != currentColor {
+			pos := PositionFromString(piecePos.Location)
+			return &pos
+		}
+	}
+	return nil
+}
+
+func extractCurrentTurnKingPosition(currentColor string, b *Board) *PossibleMovesPosition {
+	for _, piecePos := range b.Pieces {
+		if piecePos.Type == KingType && piecePos.Color == currentColor {
 			pos := PositionFromString(piecePos.Location)
 			return &pos
 		}
@@ -587,7 +615,7 @@ func (b *Board) isMoveSafeForKingOrTeleport(from, to PossibleMovesPosition, curr
 	// Temporarily move the piece or teleport the king
 	if isTeleportKing {
 		// For teleporting the king, move the king to the new position
-		kingPosition := extractKingPosition(currentPlayer, b)
+		kingPosition := extractCurrentTurnKingPosition(currentPlayer, b)
 		if kingPosition == nil {
 			return false // No king found
 		}
@@ -606,7 +634,7 @@ func (b *Board) isMoveSafeForKingOrTeleport(from, to PossibleMovesPosition, curr
 
 // isKingInCheck checks if the king is in check after the move or teleport
 func (b *Board) isKingInCheck(currentPlayer string) bool {
-	kingPosition := extractKingPosition(currentPlayer, b)
+	kingPosition := extractCurrentTurnKingPosition(currentPlayer, b)
 	if kingPosition == nil {
 		return false // No king found
 	}
@@ -687,8 +715,10 @@ func (b *Board) PlaceMine(currentPlayer string) {
 	for i := 0; i < b.Rows; i++ {
 		for j := 0; j < b.Columns; j++ {
 			newPos := PossibleMovesPosition{Row: i, Col: j}
+			location := fmt.Sprintf("%c%d", 'A'+newPos.Col, newPos.Row+1)
 			if b.GetPiece(newPos) == nil { // Ensure the square is empty
 				if opponentKing == nil || !isSurroundingKing(opponentKing.Location, newPos) {
+					fmt.Println("possible mine position is ", location)
 					validMinePositions = append(validMinePositions, newPos)
 				}
 			}
@@ -699,6 +729,8 @@ func (b *Board) PlaceMine(currentPlayer string) {
 	if len(validMinePositions) > 0 {
 		selectedPosition := validMinePositions[rand.Intn(len(validMinePositions))]
 		b.Mines = append(b.Mines, Mine{Position: selectedPosition, Owner: currentPlayer, IsActive: true})
+		location := fmt.Sprintf("%c%d", 'A'+selectedPosition.Col, selectedPosition.Row+1)
+		fmt.Println("mine positioned at ", selectedPosition, "at location ", location)
 	}
 }
 
@@ -710,12 +742,14 @@ func isSurroundingKing(kingPos string, pos PossibleMovesPosition) bool {
 	return rowDiff <= 1 && colDiff <= 1
 }
 
-func (b *Board) TriggerMineIfPresent(to PossibleMovesPosition, currentPlayer string) {
+func (b *Board) TriggerMineIfPresent(to PossibleMovesPosition, currentPlayer string) (bool, string) {
 	for i, mine := range b.Mines {
 		// Check if the piece landed on an active mine
 		if mine.Position == to && mine.IsActive && mine.Owner != currentPlayer {
 			fmt.Println("Mine triggered! Destroying opponent's piece.")
-
+			fmt.Println("To Position is")
+			fmt.Println("col = ", to.Col)
+			fmt.Println("row = ", to.Row)
 			// Remove the opponent's piece
 			for j, piece := range b.Pieces {
 				if piece.Location == fmt.Sprintf("%c%d", 'A'+to.Col, to.Row+1) {
@@ -726,9 +760,11 @@ func (b *Board) TriggerMineIfPresent(to PossibleMovesPosition, currentPlayer str
 
 			// Deactivate the mine after triggering
 			b.Mines[i].IsActive = false
-			break
+			return true, "Mine triggered! Opponent's piece destroyed."
 		}
 	}
+	// Return false if no mine was triggered
+	return false, ""
 }
 
 func (b *Board) PowerBoost3(currentPlayer string) error {

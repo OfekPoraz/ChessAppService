@@ -122,10 +122,11 @@ func MakeMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isWin, winner := game.Board.MovePiece(game.CurrentTurn, move.From, move.To)
+	isWin, winner, killReason := game.Board.MovePiece(game.CurrentTurn, move.From, move.To)
 	if isWin {
 		response := map[string]interface{}{
-			"winner": winner,
+			"winner":     winner,
+			"killReason": killReason,
 		}
 		json.NewEncoder(w).Encode(response)
 		return
@@ -141,6 +142,7 @@ func MakeMove(w http.ResponseWriter, r *http.Request) {
 		"state":        game.State,
 		"current_turn": game.CurrentTurn,
 		"board":        game.Board.Pieces,
+		"killReason":   killReason,
 	}
 
 	fmt.Println("response - ", response)
@@ -211,7 +213,8 @@ func MakeRandomMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isWin, winner, err := game.Board.MakeRandomMove(game.CurrentTurn)
+	isWin, winner, killReason, moveTo, err := game.Board.MakeRandomMove(game.CurrentTurn)
+	fmt.Println(`made random move - moved to {} for color {}`, moveTo, game.CurrentTurn)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -219,13 +222,16 @@ func MakeRandomMove(w http.ResponseWriter, r *http.Request) {
 
 	if isWin {
 		response := map[string]interface{}{
-			"winner": winner,
+			"winner":     winner,
+			"killReason": killReason,
+			"moveTo":     moveTo,
 		}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
 
 	game.CurrentTurn = switchTurn(game.CurrentTurn)
+	fmt.Println(`new turn is {}`, game.CurrentTurn)
 	games[game.ID] = game
 
 	response := map[string]interface{}{
@@ -235,6 +241,8 @@ func MakeRandomMove(w http.ResponseWriter, r *http.Request) {
 		"state":        game.State,
 		"current_turn": game.CurrentTurn,
 		"board":        game.Board.Pieces,
+		"killReason":   killReason,
+		"moveTo":       moveTo,
 	}
 
 	json.NewEncoder(w).Encode(response)
