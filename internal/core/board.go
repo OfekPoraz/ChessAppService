@@ -1,4 +1,4 @@
-package models
+package core
 
 import (
 	"fmt"
@@ -18,11 +18,14 @@ type Mine struct {
 	IsActive bool                  `json:"isActive"` // Mine is active until triggered
 }
 
+type PieceFactoryFunc func(color string, pieceType PieceType) Piece
+
 type Board struct {
-	Rows    int             `json:"rows"`
-	Columns int             `json:"columns"`
-	Pieces  []PiecePosition `json:"pieces"`
-	Mines   []Mine          `json:"mines"` // Add this to track mines on the board
+	Rows         int              `json:"rows"`
+	Columns      int              `json:"columns"`
+	Pieces       []PiecePosition  `json:"pieces"`
+	Mines        []Mine           `json:"mines"` // Added this to track mines on the board
+	PieceFactory PieceFactoryFunc // Function to create piece instances
 }
 
 var validMoves []struct {
@@ -30,12 +33,13 @@ var validMoves []struct {
 	to   PossibleMovesPosition
 }
 
-func NewBoard(rows, columns int) *Board {
+func NewBoard(rows, columns int, pieceFactory PieceFactoryFunc) *Board {
 	return &Board{
-		Rows:    rows,
-		Columns: columns,
-		Pieces:  []PiecePosition{},
-		Mines:   []Mine{},
+		Rows:         rows,
+		Columns:      columns,
+		Pieces:       []PiecePosition{},
+		Mines:        []Mine{},
+		PieceFactory: pieceFactory,
 	}
 }
 
@@ -259,7 +263,8 @@ func (b *Board) GetPossibleMoves(position PossibleMovesPosition) []PossibleMoves
 	if piecePos == nil {
 		return nil
 	}
-	piece := CreatePiece(piecePos.Color, piecePos.Type)
+	// Use the pieceFactory function to create a piece instance
+	piece := b.PieceFactory(piecePos.Color, piecePos.Type)
 	fmt.Println(piece)
 	return piece.GetPossibleMoves(b, position)
 }

@@ -1,4 +1,4 @@
-package models
+package core
 
 type PossibleMovesPosition struct {
 	Row       int  `json:"row"`

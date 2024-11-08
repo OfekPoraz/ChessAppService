@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"ChessAppIdoBack/internal/core"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -83,8 +84,8 @@ func MakeMove(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var move struct {
-		From models.PossibleMovesPosition `json:"from"`
-		To   models.PossibleMovesPosition `json:"to"`
+		From core.PossibleMovesPosition `json:"from"`
+		To   core.PossibleMovesPosition `json:"to"`
 	}
 	err := json.NewDecoder(r.Body).Decode(&move)
 	if err != nil {
@@ -189,7 +190,7 @@ func GetPossibleMoves(w http.ResponseWriter, r *http.Request) {
 	fmt.Println(game.Player1ID)
 	fmt.Println(game.Board)
 
-	position := models.PositionFromString(piecePosition)
+	position := core.PositionFromString(piecePosition)
 	fmt.Println("PossibleMovesPosition: ")
 	fmt.Println(position)
 	possibleMoves := game.Board.GetPossibleMoves(position)
