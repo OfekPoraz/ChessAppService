@@ -31,5 +31,8 @@ func registerGameRoutes(r *mux.Router) {
 	r.HandleFunc("/games/{id}/powerboost/0", handlers.ApplyPowerBoost0).Methods("POST")
 	r.HandleFunc("/games/{id}/powerboost/1", handlers.ApplyPowerBoost1).Methods("POST")
 	r.HandleFunc("/games/{id}/powerboost/2", handlers.ApplyPowerBoost2).Methods("POST")
-	r.HandleFunc("/games/{id}/powerboost/3", handlers.ApplyPowerBoost3).Methods("POST")
+	r.HandleFunc("/games/{id}/powerboost/3", handlers.ApplyMinePowerBoost3).Methods("POST")
+	r.HandleFunc("/games/{id}/powerboost/4", handlers.ApplyLavaStrike).Methods("POST")
+	r.HandleFunc("/games/{id}/powerboost/5", handlers.ApplyLightningStrike).Methods("POST")
+
 }

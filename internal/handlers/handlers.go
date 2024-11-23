@@ -324,7 +324,7 @@ func ApplyPowerBoost2(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-func ApplyPowerBoost3(w http.ResponseWriter, r *http.Request) {
+func ApplyMinePowerBoost3(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	gameID := params["id"]
 
@@ -334,7 +334,7 @@ func ApplyPowerBoost3(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := game.Board.PowerBoost3(game.CurrentTurn)
+	err := game.Board.MinePowerBoost(game.CurrentTurn)
 	if err != nil {
 		http.Error(w, "Failed to apply power boost", http.StatusInternalServerError)
 		return
@@ -345,6 +345,57 @@ func ApplyPowerBoost3(w http.ResponseWriter, r *http.Request) {
 
 	response := map[string]interface{}{
 		"success": true,
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func ApplyLavaStrike(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+	game, ok := games[params["id"]]
+	if !ok {
+		http.Error(w, "Game not found", http.StatusNotFound)
+		return
+	}
+
+	lavaHitZone, err := game.Board.ApplyLavaStrike(game.CurrentTurn)
+	fmt.Println(`lavaHitZone is {}`, lavaHitZone)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	game.CurrentTurn = switchTurn(game.CurrentTurn)
+	games[game.ID] = game
+
+	response := map[string]interface{}{
+		"success":     true,
+		"lavaHitZone": lavaHitZone,
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func ApplyLightningStrike(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+	game, ok := games[params["id"]]
+	if !ok {
+		http.Error(w, "Game not found", http.StatusNotFound)
+		return
+	}
+
+	lightningHitZone, boardAfterEachHit, err := game.Board.ApplyLightningStrike(game.CurrentTurn)
+	fmt.Println(`lightningHitZone is {}`, lightningHitZone)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	game.CurrentTurn = switchTurn(game.CurrentTurn)
+	games[game.ID] = game
+
+	response := map[string]interface{}{
+		"success":           true,
+		"lightningHitZone":  lightningHitZone,
+		"boardAfterEachHit": boardAfterEachHit,
 	}
 	json.NewEncoder(w).Encode(response)
 }

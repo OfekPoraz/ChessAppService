@@ -772,9 +772,250 @@ func (b *Board) TriggerMineIfPresent(to PossibleMovesPosition, currentPlayer str
 	return false, ""
 }
 
-func (b *Board) PowerBoost3(currentPlayer string) error {
+func (b *Board) MinePowerBoost(currentPlayer string) error {
 	b.PlaceMine(currentPlayer)
 	return nil
+}
+
+func (b *Board) ApplyLavaStrike(currentPlayer string) ([]PossibleMovesPosition, error) {
+	var lavaHitZone []PossibleMovesPosition
+
+	// Collect all valid pieces of the current player (excluding the king)
+	var playerPieces []PiecePosition
+	for _, piece := range b.Pieces {
+		if piece.Color == currentPlayer && piece.Type != KingType {
+			playerPieces = append(playerPieces, piece)
+		}
+	}
+
+	// If no valid pieces are available for the Lava strike
+	if len(playerPieces) == 0 {
+		return nil, fmt.Errorf("no valid pieces for Lava strike")
+	}
+
+	// Randomly select a piece for the Lava strike
+	selectedPiece := playerPieces[rand.Intn(len(playerPieces))]
+	selectedPosition := PositionFromString(selectedPiece.Location)
+
+	// Determine the Lava hit zone radius (2-4 tiles)
+	lavaRadius := rand.Intn(3) + 2 // Random radius between 2 and 4
+
+	// Define possible directions with probabilities
+	type Direction struct {
+		offsets [][]int // Relative row and column offsets
+		prob    int     // Probability weight
+	}
+	directions := []Direction{
+		{
+			offsets: [][]int{
+				{1, 0}, {-1, 0}, // Up and down
+			},
+			prob: 30,
+		},
+		{
+			offsets: [][]int{
+				{0, 1}, {0, -1}, // Left and right
+			},
+			prob: 30,
+		},
+		{
+			offsets: [][]int{
+				{0, 1}, {0, -1}, {1, 0}, // Left, right, and up
+			},
+			prob: 30,
+		},
+		{
+			offsets: [][]int{
+				{1, 0}, {-1, 0}, {0, 1}, {0, -1}, // Up, down, left, right
+			},
+			prob: 10,
+		},
+	}
+
+	// Calculate cumulative probabilities
+	cumulativeProbabilities := []int{}
+	sum := 0
+	for _, dir := range directions {
+		sum += dir.prob
+		cumulativeProbabilities = append(cumulativeProbabilities, sum)
+	}
+
+	// Select a direction set based on the probabilities
+	randomValue := rand.Intn(sum)
+	var selectedDirection [][]int
+	for i, prob := range cumulativeProbabilities {
+		if randomValue < prob {
+			selectedDirection = directions[i].offsets
+			break
+		}
+	}
+
+	// Generate positions within the selected direction and radius
+	for _, offset := range selectedDirection {
+		for step := 1; step <= lavaRadius; step++ {
+			newRow := selectedPosition.Row + step*offset[0]
+			newCol := selectedPosition.Col + step*offset[1]
+			if b.IsValidPosition(PossibleMovesPosition{Row: newRow, Col: newCol}) {
+				lavaHitZone = append(lavaHitZone, PossibleMovesPosition{Row: newRow, Col: newCol})
+			}
+		}
+	}
+
+	// Remove enemy pawns within the Lava hit zone
+	for _, pos := range lavaHitZone {
+		location := fmt.Sprintf("%c%d", 'A'+pos.Col, pos.Row+1) // Convert position to string
+		for i := 0; i < len(b.Pieces); i++ {
+			if b.Pieces[i].Location == location && b.Pieces[i].Color != currentPlayer && b.Pieces[i].Type == PawnType {
+				// Remove the enemy pawn
+				b.Pieces = append(b.Pieces[:i], b.Pieces[i+1:]...)
+				break
+			}
+		}
+	}
+
+	// Return the Lava hit zone positions for frontend animation
+	return lavaHitZone, nil
+}
+
+func (b *Board) ApplyLightningStrike(currentPlayer string) ([]PossibleMovesPosition, [][]PiecePosition, error) {
+	var lightningHits []PossibleMovesPosition
+	var removedPieces []PiecePosition
+	var boardAfterEachHit [][]PiecePosition
+
+	// Collect all valid target locations
+	validTargets := make([]PossibleMovesPosition, 0)
+	for i := 0; i < b.Rows; i++ {
+		for j := 0; j < b.Columns; j++ {
+			pos := PossibleMovesPosition{Row: i, Col: j}
+			if b.IsValidPosition(pos) {
+				validTargets = append(validTargets, pos)
+			}
+		}
+	}
+
+	if len(validTargets) == 0 {
+		return nil, nil, fmt.Errorf("no valid targets for lightning strike")
+	}
+
+	// Base static probabilities
+	baseProbabilities := map[PieceType]int{
+		PawnType:   50,
+		KnightType: 10,
+		BishopType: 15,
+		RookType:   8,
+		QueenType:  7,
+		KingType:   0, // King cannot be killed
+	}
+
+	emptySquareProbability := 10 // Default probability for empty squares
+
+	// Adjust probabilities dynamically based on available pieces
+	totalPieces := len(b.Pieces)
+	if totalPieces <= 5 {
+		// Increase odds for empty squares when fewer pieces remain
+		emptySquareProbability = 70
+	}
+
+	adjustedProbabilities := calculateAdjustedProbabilities(baseProbabilities, b.Pieces, currentPlayer)
+
+	minKillReached := false
+	playerKills := 0
+	strikes := 3
+
+	for strikes > 0 {
+		// Select a random target position
+		targetIdx := rand.Intn(len(validTargets))
+		targetPos := validTargets[targetIdx]
+		validTargets = append(validTargets[:targetIdx], validTargets[targetIdx+1:]...) // Remove target from the list
+
+		// Determine if the target is a piece or an empty square
+		piece := b.GetPiece(targetPos)
+
+		if piece != nil {
+			// Get the probability of killing the piece
+			pieceOdds := adjustedProbabilities[piece.Type]
+			if piece.Color == currentPlayer {
+				pieceOdds = pieceOdds / 3 // Reduce odds for killing player's own pieces
+			}
+
+			if rand.Intn(100) < pieceOdds {
+				// Kill the piece
+				if piece.Color != currentPlayer || playerKills < 1 {
+					removedPieces = append(removedPieces, *piece)
+					b.RemovePiece(targetPos) // Remove piece from the board
+					if piece.Color == currentPlayer {
+						playerKills++
+					}
+					minKillReached = true
+				}
+			}
+		} else if rand.Intn(100) < emptySquareProbability {
+			// Hit an empty square (no action needed for now)
+		}
+
+		lightningHits = append(lightningHits, targetPos)
+		boardAfterEachHit = append(boardAfterEachHit, b.Pieces)
+		strikes--
+		fmt.Println(`lightning is `, lightningHits)
+		// If no valid targets remain, break the loop
+		if len(validTargets) == 0 {
+			break
+		}
+	}
+
+	// If no kills occurred after all strikes, repeat if valid targets remain
+	if !minKillReached {
+		if len(validTargets) == 0 {
+			return nil, nil, fmt.Errorf("no valid targets remaining for lightning strike")
+		}
+		return b.ApplyLightningStrike(currentPlayer)
+	}
+
+	return lightningHits, boardAfterEachHit, nil
+}
+
+// Helper function to calculate adjusted probabilities based on available pieces
+func calculateAdjustedProbabilities(baseProbabilities map[PieceType]int, pieces []PiecePosition, currentPlayer string) map[PieceType]int {
+	adjustedProbabilities := make(map[PieceType]int)
+	availablePieceCounts := make(map[PieceType]int)
+
+	// Count available pieces of each type
+	for _, piece := range pieces {
+		if piece.Color != currentPlayer || piece.Type == KingType {
+			continue // Exclude the player's pieces and the King
+		}
+		availablePieceCounts[piece.Type]++
+	}
+
+	// Adjust probabilities based on available pieces
+	totalProbability := 0
+	for pieceType, baseProb := range baseProbabilities {
+		if availablePieceCounts[pieceType] == 0 {
+			// Distribute the probability of missing pieces equally among others
+			continue
+		} else {
+			adjustedProbabilities[pieceType] = baseProb
+			totalProbability += baseProb
+		}
+	}
+
+	// Normalize probabilities to ensure they sum to 100
+	for pieceType := range adjustedProbabilities {
+		adjustedProbabilities[pieceType] = (adjustedProbabilities[pieceType] * 100) / totalProbability
+	}
+
+	return adjustedProbabilities
+}
+
+// RemovePiece Helper method to remove a piece from the board
+func (b *Board) RemovePiece(pos PossibleMovesPosition) {
+	location := fmt.Sprintf("%c%d", 'A'+pos.Col, pos.Row+1)
+	for i, piece := range b.Pieces {
+		if piece.Location == location {
+			b.Pieces = append(b.Pieces[:i], b.Pieces[i+1:]...)
+			break
+		}
+	}
 }
 
 func upgradePieceType(currentType PieceType) PieceType {
